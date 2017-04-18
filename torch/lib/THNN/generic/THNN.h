@@ -1426,4 +1426,24 @@ TH_API void THNN_(VolumetricReplicationPadding_updateGradInput)(
           int pleft, int pright,
           int ptop, int pbottom,
           int pfront, int pback);
+
+TH_API void THNN_(Im2Col_updateGradInput)(
+          THNNState *state,
+          THTensor *input,
+          THTensor *gradOutput,
+          THTensor *gradInput,
+          int kW, int kH,
+          int dW, int dH,
+          int padW, int padH,
+          int sW, int sH);
+
+TH_API void THNN_(Im2Col_updateOutput)(
+          THNNState *state,
+          THTensor *input,
+          THTensor *output,
+          int kW, int kH,
+          int dW, int dH,
+          int padW, int padH,
+          int sW, int sH);
+
 #endif

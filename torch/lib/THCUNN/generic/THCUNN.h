@@ -1328,4 +1328,23 @@ TH_API void THNN_(VolumetricReplicationPadding_updateGradInput)(
                   int ptop, int pbottom,
                   int pfront, int pback);
 
+TH_API void THNN_(Im2Col_updateGradInput)(
+                  THCState *state,
+                  THCTensor *input,
+                  THCTensor *gradOutput,
+                  THCTensor *gradInput,
+                  int kW, int kH,
+                  int dW, int dH,
+                  int padW, int padH,
+                  int sW, int sH);
+
+TH_API void THNN_(Im2Col_updateOutput)(
+                  THCState *state,
+                  THCTensor *input,
+                  THCTensor *output,
+                  int kW, int kH,
+                  int dW, int dH,
+                  int padW, int padH,
+                  int sW, int sH);
+
 #endif
