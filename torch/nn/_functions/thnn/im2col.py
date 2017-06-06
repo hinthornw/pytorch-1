@@ -45,4 +45,4 @@ class Im2Col(Function):
                                        self.sH, self.sW)
         return grad_input
 
-_all_functions.append(Im2Col)
+#_all_functions.append(Im2Col)

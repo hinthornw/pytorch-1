@@ -19,13 +19,15 @@ static inline void THNN_(Im2Col_shapeCheck)(
   int dimf = 0;
   int dimh = 1;
   int dimw = 2;
-  int diml = 1;
+
+  THCUNN_argCheck(state, ndim == 3, 2, input,
+                  "3D input tensor expected but got: %s");
 
   long nInputPlane  = input->size[dimf];
   long inputHeight  = input->size[dimh];
   long inputWidth   = input->size[dimw];
-  long outputHeight = (inputHeight + 2*padH - (dH * (kH - 1)) + 1) / sH + 1;
-  long outputWidth  = (inputWidth + 2*padW - (dW * (kW - 1)) + 1) / sW + 1;
+  long outputHeight = (inputHeight + 2*padH - kH - ((kH - 1)*(dH - 1))) / sH + 1;
+  long outputWidth  = (inputWidth + 2*padW - kW - ((kW - 1)*(dW - 1))) / sW + 1;
   long nOutputPlane = nInputPlane * kW * kH;
   long outputLength = outputHeight * outputWidth;
 
@@ -34,11 +36,9 @@ static inline void THNN_(Im2Col_shapeCheck)(
               "Calculated output size: (%d x %d). Output size is too small",
               nInputPlane,inputHeight,inputWidth,nOutputPlane,outputLength);
 
-  THCUNN_check_dim_size(state, input, ndim, dimf, nInputPlane);
-
   if (gradOutput != NULL) {
-    THCUNN_check_dim_size(state, gradOutput, ndim, dimf, nOutputPlane);
-    THCUNN_check_dim_size(state, gradOutput, ndim, diml, outputLength);
+    THCUNN_check_dim_size(state, gradOutput, ndim, 0, nOutputPlane);
+    THCUNN_check_dim_size(state, gradOutput, ndim, 1, outputLength);
   }
 }
 
@@ -54,9 +54,12 @@ void THNN_(Im2Col_updateOutput)(
   THCUNN_assertSameGPU(state, 2, input, output);
 
   // Params:
-  long inputHeight  = input->size[1];
-  long inputWidth   = input->size[2];
-  long nInputPlane = input->size[0];
+  int dimf = 0;
+  int dimh = 1;
+  int dimw = 2;
+  long inputHeight  = input->size[dimh];
+  long inputWidth   = input->size[dimw];
+  long nInputPlane = input->size[dimf];
   long outputHeight = (inputHeight + 2*padH - (dH * (kH - 1)) + 1) / sH + 1;
   long outputWidth  = (inputWidth + 2*padW - (dW * (kW - 1)) + 1) / sW + 1;
   long nOutputPlane = nInputPlane * kW * kH;
