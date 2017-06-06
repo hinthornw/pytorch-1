@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
          libjpeg-dev \
          libpng-dev \
          libcudnn6=$CUDNN_VERSION-1+cuda8.0 \             
-         gdb \
          libcudnn6-dev=$CUDNN_VERSION-1+cuda8.0 && \
      rm -rf /var/lib/apt/lists/*
 
