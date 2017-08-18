@@ -2,6 +2,10 @@
 #define TH_GENERIC_FILE "generic/THTensorMath.c"
 #else
 
+#ifndef NAN
+  #define NAN (nan(NULL))
+#endif
+
 #ifdef _OPENMP
 #include <omp.h>
 #endif
@@ -580,6 +584,33 @@ real THTensor_(maxall)(THTensor *tensor)
                     th_isnan_break(value)
                   });
   return theMax;
+}
+
+static void THTensor_(quickselectnoidx)(real *arr, long k, long elements, long stride);
+
+real THTensor_(medianall)(THTensor *tensor)
+{
+  THArgCheck(tensor->nDimension > 0, 1, "tensor must have one dimension");
+
+  real theMedian;
+  ptrdiff_t numel;
+  long k;
+  THTensor *temp_;
+  real *temp__data;
+
+  numel = THTensor_(nElement)(tensor);
+  k = (numel-1) >> 1;
+
+  temp_ = THTensor_(newClone)(tensor);
+  temp__data = THTensor_(data)(temp_);
+
+  THTensor_(quickselectnoidx)(temp__data, k, numel, 1);
+
+  theMedian = temp__data[k];
+
+  THTensor_(free)(temp_);
+
+  return theMedian;
 }
 
 accreal THTensor_(sumall)(THTensor *tensor)
@@ -1275,7 +1306,9 @@ void THTensor_(addmm)(THTensor *r_, real beta, THTensor *t, real alpha, THTensor
   if(t != r_)
   {
     THTensor_(resizeAs)(r_, t);
-    THTensor_(copy)(r_, t);
+    if (beta != 0.0) {
+      THTensor_(copy)(r_, t);
+    }
   }
 
   /* r_ */
@@ -1342,6 +1375,7 @@ void THTensor_(addmm)(THTensor *r_, real beta, THTensor *t, real alpha, THTensor
     m2_ = THTensor_(newContiguous)(m2);
   }
 
+#pragma omp critical(blasgemm)
   /* do the operation */
   THBlas_(gemm)(transpose_m1,
                 transpose_m2,
@@ -1444,7 +1478,9 @@ void THTensor_(addbmm)(THTensor *result, real beta, THTensor *t, real alpha, THT
 
   if (t != result) {
     THTensor_(resizeAs)(result, t);
-    THTensor_(copy)(result, t);
+    if (beta != 0.0) {
+      THTensor_(copy)(result, t);
+    }
   }
 
   THTensor *matrix1 = THTensor_(new)();
@@ -1485,7 +1521,9 @@ void THTensor_(baddbmm)(THTensor *result, real beta, THTensor *t, real alpha, TH
 
   if (t != result) {
     THTensor_(resizeAs)(result, t);
-    THTensor_(copy)(result, t);
+    if (beta != 0.0) {
+      THTensor_(copy)(result, t);
+    }
   }
 
   THTensor *matrix1 = THTensor_(new)();
@@ -1557,6 +1595,10 @@ void THTensor_(max)(THTensor *values_, THLongTensor *indices_, THTensor *t, int 
     THLongTensor_zero(indices_);
 
     if(t->size[dimension] == 1) {
+      if (!keepdim) {
+        THTensor_(squeeze1d)(values_, values_, dimension);
+        THLongTensor_squeeze1d(indices_, indices_, dimension);
+      }
       return;
     }
 
@@ -1633,6 +1675,10 @@ void THTensor_(min)(THTensor *values_, THLongTensor *indices_, THTensor *t, int 
     THLongTensor_zero(indices_);
 
     if(t->size[dimension] == 1) {
+      if (!keepdim) {
+        THTensor_(squeeze1d)(values_, values_, dimension);
+        THLongTensor_squeeze1d(indices_, indices_, dimension);
+      }
       return;
     }
 
@@ -1975,6 +2021,17 @@ void THTensor_(range)(THTensor *r_, accreal xmin, accreal xmax, accreal step)
   TH_TENSOR_APPLY(real, r_, *r__data = xmin + (i++)*step;);
 }
 
+void THTensor_(arange)(THTensor *r_, accreal xmin, accreal xmax, accreal step) {
+#if defined(TH_REAL_IS_FLOAT) || defined(TH_REAL_IS_DOUBLE)
+  int m = fmod(xmax - xmin,step) == 0;
+#else
+  int m = (xmax - xmin) % step == 0;
+#endif
+  if (m)
+    xmax -= step;
+  THTensor_(range)(r_,xmin,xmax,step);
+}
+
 void THTensor_(randperm)(THTensor *r_, THGenerator *_generator, long n)
 {
   real *r__data;
@@ -2027,6 +2084,9 @@ void THTensor_(reshape)(THTensor *r_, THTensor *t, THLongStorage *size)
 
 #define LONG_SWAP(AAA, BBB) swap = AAA; AAA = BBB; BBB = swap
 #define REAL_SWAP(AAA, BBB) rswap = AAA; AAA = BBB; BBB = rswap
+
+#define ARR_SWAP(III, JJJ) \
+  REAL_SWAP(ARR(III), ARR(JJJ));
 
 #define BOTH_SWAP(III, JJJ) \
   REAL_SWAP(ARR(III), ARR(JJJ)); \
@@ -2243,6 +2303,53 @@ void THTensor_(sort)(THTensor *rt_, THLongTensor *ri_, THTensor *t, int dimensio
                            ri__data[i*ri__stride] = i;
                          THTensor_(quicksortascend)(rt__data, ri__data, rt__size, rt__stride);)
       }
+}
+
+/* Implementation of the Quickselect algorithm, based on Nicolas Devillard's
+public domain implementation at http://ndevilla.free.fr/median/median/
+Adapted similarly to the above Quicksort algorithm.
+This version does not produce indices along with values. */
+static void THTensor_(quickselectnoidx)(real *arr, long k, long elements, long stride)
+{
+  long P, L, R, i, j, swap;
+  real rswap, piv;
+  L = 0;
+  R = elements-1;
+
+  do {
+    if (R <= L) /* One element only */
+      return;
+
+    if (R == L+1) {  /* Two elements only */
+      if (ARR(L) > ARR(R)) {
+        ARR_SWAP(L, R);
+      }
+      return;
+    }
+
+    /* Use median of three for pivot choice */
+    P=(L+R)>>1;
+    ARR_SWAP(P, L+1);
+    if (ARR(L+1) > ARR(R)) { ARR_SWAP(L+1, R); }
+    if (ARR(L) > ARR(R)) { ARR_SWAP(L, R); }
+    if (ARR(L+1) > ARR(L)) { ARR_SWAP(L+1, L); }
+
+    i = L+1;
+    j = R;
+    piv = ARR(L);
+    do {
+      do i++; while(ARR(i) < piv);
+      do j--; while(ARR(j) > piv);
+      if (j < i)
+        break;
+      ARR_SWAP(i, j);
+    } while(1);
+    ARR_SWAP(L, j);
+
+    /* Re-set active partition */
+    if (j <= k) L=i;
+    if (j >= k) R=j-1;
+  } while(1);
 }
 
 /* Implementation of the Quickselect algorithm, based on Nicolas Devillard's
@@ -2746,10 +2853,12 @@ TENSOR_IMPLEMENT_LOGICAL(ne,!=)
 
 #if defined(TH_REAL_IS_LONG)
 LAB_IMPLEMENT_BASIC_FUNCTION(abs,labs)
+LAB_IMPLEMENT_BASIC_FUNCTION(neg,-)
 #endif /* long only part */
 
 #if defined(TH_REAL_IS_SHORT) || defined(TH_REAL_IS_INT)
 LAB_IMPLEMENT_BASIC_FUNCTION(abs,abs)
+LAB_IMPLEMENT_BASIC_FUNCTION(neg,-)
 #endif /* int only part */
 
 #if defined(TH_REAL_IS_BYTE)
@@ -2826,7 +2935,7 @@ void THTensor_(mean)(THTensor *r_, THTensor *t, int dimension, int keepdim)
   THTensor_(div)(r_, r_, t->size[dimension]);
 }
 
-void THTensor_(std)(THTensor *r_, THTensor *t, int dimension, int flag, int keepdim)
+void THTensor_(std)(THTensor *r_, THTensor *t, int dimension, int biased, int keepdim)
 {
   THLongStorage *dim;
 
@@ -2849,7 +2958,7 @@ void THTensor_(std)(THTensor *r_, THTensor *t, int dimension, int flag, int keep
                          sum2 += z*z;
                        }
 
-                       if(flag)
+                       if(biased)
                        {
                          sum /= t_size;
                          sum2 /= t_size;
@@ -2871,7 +2980,7 @@ void THTensor_(std)(THTensor *r_, THTensor *t, int dimension, int flag, int keep
   }
 }
 
-void THTensor_(var)(THTensor *r_, THTensor *t, int dimension, int flag, int keepdim)
+void THTensor_(var)(THTensor *r_, THTensor *t, int dimension, int biased, int keepdim)
 {
   THLongStorage *dim;
 
@@ -2894,7 +3003,7 @@ void THTensor_(var)(THTensor *r_, THTensor *t, int dimension, int flag, int keep
                          sum2 += z*z;
                        }
 
-                       if(flag)
+                       if(biased)
                        {
                          sum /= t_size;
                          sum2 /= t_size;
@@ -3034,18 +3143,18 @@ accreal THTensor_(meanall)(THTensor *tensor)
   return THTensor_(sumall)(tensor)/THTensor_(nElement)(tensor);
 }
 
-accreal THTensor_(varall)(THTensor *tensor)
+accreal THTensor_(varall)(THTensor *tensor, int biased)
 {
   accreal mean = THTensor_(meanall)(tensor);
   accreal sum = 0;
   TH_TENSOR_APPLY(real, tensor, sum += (*tensor_data - mean)*(*tensor_data - mean););
-  sum /= (THTensor_(nElement)(tensor)-1);
+  sum /= THTensor_(nElement)(tensor) - (biased ? 0 : 1);
   return sum;
 }
 
-accreal THTensor_(stdall)(THTensor *tensor)
+accreal THTensor_(stdall)(THTensor *tensor, int biased)
 {
-  return sqrt(THTensor_(varall)(tensor));
+  return sqrt(THTensor_(varall)(tensor, biased));
 }
 
 void THTensor_(linspace)(THTensor *r_, real a, real b, long n)

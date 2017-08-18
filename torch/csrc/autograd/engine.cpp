@@ -1,5 +1,6 @@
 #include "torch/csrc/autograd/engine.h"
 #include "torch/csrc/autograd/functions/basic_ops.h"
+#include "torch/csrc/utils/auto_gpu.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -9,18 +10,16 @@
 #include <mutex>
 #include <set>
 #include <string>
-#include <THPP/THPP.h>
 #include <thread>
 #include <unordered_set>
 #include <typeinfo>
 #include <sstream>
+#include <TH/TH.h>
 
 #ifdef WITH_CUDA
 #include <cuda.h>
 #include <THC/THC.h>
 #endif
-
-using thpp::Tensor;
 
 namespace torch { namespace autograd {
 
@@ -106,7 +105,9 @@ Engine::Engine() : ready_queues() {
 // This Engine's ReadyQueues and their corresponding threads are leaked here
 Engine::~Engine() = default;
 
-auto Engine::thread_main(std::shared_ptr<ReadyQueue> queue) -> void {
+auto Engine::thread_main(std::shared_ptr<ReadyQueue> queue, int device) -> void {
+  THInferNumThreads();
+  AutoGPU guard(device);
   while (1) {
     FunctionTask task = queue->pop_back();
     if (!task.base->has_error.load()) {
@@ -276,11 +277,29 @@ auto Engine::compute_dependencies(function_queue queue, GraphTask& task) -> void
   }
 }
 
+struct ClearCallbacks {
+  ClearCallbacks(std::vector<std::function<void()>>& callbacks,
+                 std::mutex &callbacks_lock)
+    : callbacks(callbacks)
+    , callbacks_lock(callbacks_lock) { clear(); }
+  ~ClearCallbacks() { clear(); }
+
+  void clear() {
+    std::lock_guard<std::mutex> lock(callbacks_lock);
+    callbacks.clear();
+  }
+
+  std::vector<std::function<void()>>& callbacks;
+  std::mutex& callbacks_lock;
+};
+
 auto Engine::execute(const function_list& input_roots,
                      variable_list& inputs,
                      bool keep_graph,
                      const callback_map& callbacks) -> void {
   std::call_once(start_threads_flag, &Engine::start_threads, this);
+  // Callbacks are only valid for the duration of this run and should always be cleared
+  ClearCallbacks _cb_guard(post_callbacks, post_callbacks_lock);
 
   GraphTask graph_task(keep_graph, callbacks);
   std::unique_lock<std::mutex> lock(graph_task.mutex);
@@ -320,6 +339,21 @@ auto Engine::execute(const function_list& input_roots,
   if (!graph_task.not_ready.empty()) {
     throw std::runtime_error("could not compute gradients for some functions");
   }
+
+  // Unlocking is necessary, because the callback can register
+  // more callbacks (or they can be registered from other threads
+  // while it's waiting.
+  std::unique_lock<std::mutex> cb_lock(post_callbacks_lock);
+  for (std::size_t i = 0; i < post_callbacks.size(); ++i) {
+    cb_lock.unlock();
+    post_callbacks[i]();
+    cb_lock.lock();
+  }
+}
+
+void Engine::queue_callback(std::function<void()> callback) {
+  std::lock_guard<std::mutex> lock(post_callbacks_lock);
+  post_callbacks.emplace_back(std::move(callback));
 }
 
 auto Engine::ready_queue(int device) -> ReadyQueue& {
@@ -335,10 +369,12 @@ auto Engine::start_threads() -> void {
     num_devices = 0;
   }
 #endif
-  ready_queues = std::vector<std::shared_ptr<ReadyQueue>>(num_devices + 1);
-  for (auto& queue : ready_queues) {
+  int num_threads = num_devices + 1;
+  ready_queues = std::vector<std::shared_ptr<ReadyQueue>>(num_threads);
+  for (int i = 0; i < num_threads; ++i) {
+    auto& queue = ready_queues[i];
     queue.reset(new ReadyQueue());
-    std::thread t(&Engine::thread_main, this, queue);
+    std::thread t(&Engine::thread_main, this, queue, i - 1);
     t.detach();
   }
 }

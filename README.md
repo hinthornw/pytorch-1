@@ -6,7 +6,7 @@ PyTorch is a Python package that provides two high-level features:
 - Tensor computation (like NumPy) with strong GPU acceleration
 - Deep neural networks built on a tape-based autograd system
 
-You can reuse your favorite python packages such as NumPy, SciPy and Cython to extend PyTorch when needed.
+You can reuse your favorite Python packages such as NumPy, SciPy and Cython to extend PyTorch when needed.
 
 We are in an early-release beta. Expect some adventures and rough edges.
 
@@ -167,7 +167,7 @@ If you want to disable CUDA support, export environment variable `NO_CUDA=1`.
 
 On Linux
 ```bash
-export CMAKE_PREFIX_PATH=[anaconda root directory]
+export CMAKE_PREFIX_PATH="$(dirname $(which conda))/../" # [anaconda root directory]
 
 # Install basic dependencies
 conda install numpy pyyaml mkl setuptools cmake gcc cffi
@@ -197,11 +197,17 @@ MACOSX_DEPLOYMENT_TARGET=10.9 CC=clang CXX=clang++ python setup.py install
 
 Dockerfile is supplied to build images with cuda support and cudnn v6. Build as usual
 ```
-docker build -t pytorch-cudnnv6 .
+docker build -t pytorch .
+```
+Alternatively, if you want a runtime image, build with
+
+```
+docker build -t pytorch . -f tools/docker/Dockerfile_runtime
+
 ```
 and run with nvidia-docker:
 ```
-nvidia-docker run --rm -ti --ipc=host pytorch-cudnnv6
+nvidia-docker run --rm -ti --ipc=host pytorch
 ```
 Please note that PyTorch uses shared memory to share data between processes, so if torch multiprocessing is used (e.g.
 for multithreaded data loaders) the default shared memory segment size that container runs with is not enough, and you

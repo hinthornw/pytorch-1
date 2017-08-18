@@ -101,18 +101,18 @@ PyObject* getValueAttr(PyObject* obj, void* _unused)
   END_HANDLE_TH_ERRORS
 }
 
-template<typename T, typename ParamsT, std::shared_ptr<thpp::Tensor> ParamsT::*ptr>
+template<typename T, typename ParamsT, at::Tensor ParamsT::*ptr>
 PyObject* getTensorAttr(PyObject* obj, void* _unused)
 {
   HANDLE_TH_ERRORS
   THPCppFunction* self = (THPCppFunction*)obj;
   auto& val = ((T*)(self->cdata.get()))->*ptr;
   THPObjectPtr py_tensor;
-  if (!val) {
+  if (!val.defined()) {
     Py_INCREF(Py_None);
     py_tensor = Py_None;
   } else {
-    py_tensor = torch::createPyObject(*val);
+    py_tensor = torch::createPyObject(val);
   }
   return py_tensor.release();
   END_HANDLE_TH_ERRORS
@@ -152,6 +152,23 @@ static struct PyGetSetDef batch_norm_backward_properties[] = {
   {NULL}
 };
 
+static struct PyGetSetDef batch_norm_backward_backward_properties[] = {
+  THP_FUNCTION_DEFAULT_PROPERTIES,
+  {(char*)"running_mean", (getter)getTensorAttr<BatchNormBackwardBackward, BatchNormParams,
+                                         &BatchNormParams::running_mean>, NULL, NULL, NULL},
+  {(char*)"running_var", (getter)getTensorAttr<BatchNormBackwardBackward, BatchNormParams,
+                                         &BatchNormParams::running_var>, NULL, NULL, NULL},
+  {(char*)"training", (getter)getValueAttr<BatchNormBackwardBackward, bool, BatchNormParams,
+                                         &BatchNormParams::training, long, PyBool_FromLong>, NULL, NULL, NULL},
+  {(char*)"momentum", (getter)getValueAttr<BatchNormBackwardBackward, double, BatchNormParams,
+                                         &BatchNormParams::momentum, double, PyFloat_FromDouble>, NULL, NULL, NULL},
+  {(char*)"eps", (getter)getValueAttr<BatchNormBackwardBackward, double, BatchNormParams,
+                                         &BatchNormParams::eps, double, PyFloat_FromDouble>, NULL, NULL, NULL},
+  {(char*)"cudnn_enabled", (getter)getValueAttr<BatchNormBackwardBackward, bool, BatchNormParams,
+                                         &BatchNormParams::cudnn_enabled, long, PyBool_FromLong>, NULL, NULL, NULL},
+  {NULL}
+};
+
 static struct PyGetSetDef conv_forward_properties[] = {
   THP_FUNCTION_DEFAULT_PROPERTIES,
   {(char*)"stride", (getter)getTupleAttr<ConvForward, std::vector<int>, ConvParams,
@@ -186,6 +203,23 @@ static struct PyGetSetDef conv_backward_properties[] = {
   {NULL}
 };
 
+static struct PyGetSetDef conv_backward_backward_properties[] = {
+  THP_FUNCTION_DEFAULT_PROPERTIES,
+  {(char*)"stride", (getter)getTupleAttr<ConvBackwardBackward, std::vector<int>, ConvParams,
+                                         &ConvParams::stride, long, PyInt_FromLong>, NULL, NULL, NULL},
+  {(char*)"padding", (getter)getTupleAttr<ConvBackwardBackward, std::vector<int>, ConvParams,
+                                         &ConvParams::padding, long, PyInt_FromLong>, NULL, NULL, NULL},
+  {(char*)"dilation", (getter)getTupleAttr<ConvBackwardBackward, std::vector<int>, ConvParams,
+                                         &ConvParams::dilation, long, PyInt_FromLong>, NULL, NULL, NULL},
+  {(char*)"transposed", (getter)getValueAttr<ConvBackwardBackward, bool, ConvParams,
+                                         &ConvParams::transposed, long, PyBool_FromLong>, NULL, NULL, NULL},
+  {(char*)"output_padding", (getter)getTupleAttr<ConvBackwardBackward, std::vector<int>, ConvParams,
+                                         &ConvParams::output_padding, long, PyInt_FromLong>, NULL, NULL, NULL},
+  {(char*)"groups", (getter)getValueAttr<ConvBackwardBackward, int, ConvParams,
+                                         &ConvParams::groups, long, PyInt_FromLong>, NULL, NULL, NULL},
+  {NULL}
+};
+
 static PyObject* accumulateGradVar(PyObject *_self, void* _unused)
 {
   THPCppFunction* self = (THPCppFunction*)_self;
@@ -206,13 +240,15 @@ bool THPAutograd_initFunctions(PyObject* _unused)
   THPObjectPtr module(PyModule_New("torch._C._functions"));
   if (!module) return false;
 
-  static PyTypeObject BatchNormClass, BatchNormBackwardClass;
+  static PyTypeObject BatchNormClass, BatchNormBackwardClass, BatchNormBackwardBackwardClass;
   addClass<BatchNormForward, BatchNormCtor>(module, BatchNormClass, "BatchNorm", batch_norm_forward_properties);
   addClass<BatchNormBackward, NoCtor>(module, BatchNormBackwardClass, "BatchNormBackward", batch_norm_backward_properties);
+  addClass<BatchNormBackwardBackward, NoCtor>(module, BatchNormBackwardBackwardClass, "BatchNormBackwardBackward", batch_norm_backward_backward_properties);
 
-  static PyTypeObject ConvClass, ConvBackwardClass;
+  static PyTypeObject ConvClass, ConvBackwardClass, ConvBackwardBackwardClass;
   addClass<ConvForward, ConvCtor>(module, ConvClass, "ConvNd", conv_forward_properties);
   addClass<ConvBackward, NoCtor>(module, ConvBackwardClass, "ConvNdBackward", conv_backward_properties);
+  addClass<ConvBackwardBackward, NoCtor>(module, ConvBackwardBackwardClass, "ConvNdBackwardBackward", conv_backward_backward_properties);
 
   static PyTypeObject AccumulateGradClass;
   addClass<AccumulateGrad, NoCtor>(module, AccumulateGradClass, "AccumulateGrad", accumulate_grad_properties);
@@ -229,9 +265,20 @@ bool THPAutograd_initFunctions(PyObject* _unused)
 
   static PyTypeObject CloneClass;
   addClass<Clone, NoCtor>(module, CloneClass, "Clone");
-
+  static PyTypeObject ContiguousClass;
+  addClass<Contiguous, NoCtor>(module, ContiguousClass, "Contiguous");
   static PyTypeObject IdentityClass;
   addClass<Identity, NoCtor>(module, IdentityClass, "Identity");
+  static PyTypeObject TransposeClass;
+  addClass<Transpose, NoCtor>(module, TransposeClass, "Transpose");
+  static PyTypeObject ViewClass;
+  addClass<View, NoCtor>(module, ViewClass, "View");
+  static PyTypeObject ExpandClass;
+  addClass<Expand, NoCtor>(module, ExpandClass, "Expand");
+  static PyTypeObject NarrowClass;
+  addClass<Narrow, NoCtor>(module, NarrowClass, "Narrow");
+  static PyTypeObject CatClass;
+  addClass<Cat, NoCtor>(module, CatClass, "Cat");
 
   THPObjectPtr parent(PyImport_ImportModule("torch._C"));
   if (!parent) return false;

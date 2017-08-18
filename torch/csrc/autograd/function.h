@@ -6,18 +6,20 @@
 // Subclasses may represent "forward" or "backward" operations (i.e functions
 // and their derivatives). Some functions may be used as both.
 
-#include <memory>
-#include <THPP/THPP.h>
-#include <vector>
-
+#include <Python.h>
 #include "torch/csrc/autograd/function_hook.h"
+
+#include <ATen/ATen.h>
+
+#include <memory>
+#include <vector>
 
 namespace torch { namespace autograd {
 
 struct Function;
 struct Variable;
 
-using tensor_list = std::vector<std::unique_ptr<thpp::Tensor>>;
+using tensor_list = std::vector<at::Tensor>;
 using variable_list = std::vector<std::shared_ptr<Variable>>;
 using function_list = std::vector<std::pair<std::shared_ptr<Function>, int>>;
 
@@ -43,6 +45,7 @@ struct Function {
     , is_stochastic(false)
     , pre_hooks()
     , post_hooks()
+    , pyobj(nullptr)
     {}
 
   Function(FunctionFlags&& flags)
@@ -52,6 +55,7 @@ struct Function {
     , is_stochastic(false)
     , pre_hooks()
     , post_hooks()
+    , pyobj(nullptr)
     {}
 
   Function(const Function& other) = delete;
@@ -87,6 +91,8 @@ struct Function {
   bool is_stochastic;
   std::vector<std::shared_ptr<FunctionPreHook>> pre_hooks;
   std::vector<std::shared_ptr<FunctionPostHook>> post_hooks;
+
+  PyObject *pyobj;  // weak reference
 };
 
 

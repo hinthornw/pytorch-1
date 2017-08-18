@@ -160,6 +160,7 @@ THD_API real THDTensor_(get4d)(const THDTensor *tensor, long x0, long x1,
 THD_API accreal THDTensor_(dot)(THDTensor *self, THDTensor *src);
 THD_API real THDTensor_(minall)(THDTensor *self);
 THD_API real THDTensor_(maxall)(THDTensor *self);
+THD_API real THDTensor_(medianall)(THDTensor *self);
 THD_API accreal THDTensor_(sumall)(THDTensor *self);
 THD_API accreal THDTensor_(prodall)(THDTensor *self);
 THD_API void THDTensor_(neg)(THDTensor *self, THDTensor *src);
@@ -198,8 +199,8 @@ THD_API void THDTensor_(baddbmm)(THDTensor *self, real beta, THDTensor *src,
                                  real alpha, THDTensor *batch1, THDTensor *batch2);
 THD_API void THDTensor_(match)(THDTensor *self, THDTensor *m1,
                                THDTensor *m2, real gain);
-THD_API void THDTensor_(sum)(THDTensor *self, THDTensor *src, int dimension);
-THD_API void THDTensor_(prod)(THDTensor *self, THDTensor *src, int dimension);
+THD_API void THDTensor_(sum)(THDTensor *self, THDTensor *src, int dimension, int keepdim);
+THD_API void THDTensor_(prod)(THDTensor *self, THDTensor *src, int dimension, int keepdim);
 THD_API void THDTensor_(cumsum)(THDTensor *self, THDTensor *src, int dimension);
 THD_API void THDTensor_(cumprod)(THDTensor *self, THDTensor *src, int dimension);
 THD_API void THDTensor_(sign)(THDTensor *self, THDTensor *src);

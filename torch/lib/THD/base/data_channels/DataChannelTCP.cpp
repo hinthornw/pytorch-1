@@ -67,8 +67,8 @@ DataChannelTCP::DataChannelTCP(InitMethod::Config config, int timeout)
   : _socket(-1)
   , _port(0)
   , _timeout(timeout)
-  , _poll_events(nullptr)
   , _processes(config.world_size)
+  , _poll_events(nullptr)
 {
   _rank = config.rank;
 
@@ -277,7 +277,7 @@ void DataChannelTCP::allGather(std::vector<thpp::Tensor*>& output,
 
   auto j = group_rank, jnext = left;
   for (rank_type i = 0; i < group.size(); ++i) {
-    auto send_request = isend(*(output[j]), group.mustGetGlobalRank(right));
+    req_ptr send_request {isend(*(output[j]), group.mustGetGlobalRank(right))};
     receive(*(output[jnext]), group.mustGetGlobalRank(left));
     send_request->wait();
 
@@ -409,7 +409,7 @@ void DataChannelTCP::allReduce(thpp::Tensor& data, THDReduceOp operation,
       int dst = (newdst < rem) ? (newdst * 2 + 1) : (newdst + rem);
 
       auto dst_global_rank = group.mustGetGlobalRank(dst);
-      auto send_request = isend(data, dst_global_rank);
+      req_ptr send_request {isend(data, dst_global_rank)};
       receive(*tmp_tensor, dst_global_rank);
       send_request->wait();
 
@@ -523,7 +523,7 @@ void DataChannelTCP::broadcast(thpp::Tensor& data, rank_type src_rank,
 }
 
 
-void DataChannelTCP::send(const Scalar& data, rank_type dst_rank) {
+void DataChannelTCP::send(Scalar& data, rank_type dst_rank) {
   auto request = _send_worker.push([this, &data, dst_rank]{
     this->_send(data, dst_rank);
   });

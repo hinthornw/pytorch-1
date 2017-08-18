@@ -21,11 +21,13 @@ namespace worker {
 namespace detail {
 
 void sendValueToMaster(long long value) {
-  dataChannel->send(IntScalar(value), 0);
+  IntScalar scalar(value);
+  dataChannel->send(scalar, 0);
 }
 
 void sendValueToMaster(double value) {
-  dataChannel->send(FloatScalar(value), 0);
+  FloatScalar scalar(value);
+  dataChannel->send(scalar, 0);
 }
 
 thpp::Tensor* unpackRetrieveTensor(rpc::RPCMessage& message) {
@@ -104,6 +106,7 @@ static const std::unordered_map<rpc::function_id_type, dispatch_fn> functions {
     {Functions::tensorDot, tensorDot},
     {Functions::tensorMinall, tensorMinall},
     {Functions::tensorMaxall, tensorMaxall},
+    {Functions::tensorMedianall, tensorMedianall},
     {Functions::tensorSumall, tensorSumall},
     {Functions::tensorProdall, tensorProdall},
     {Functions::tensorNeg, tensorNeg},
