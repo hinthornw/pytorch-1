@@ -275,9 +275,12 @@
 #include "generic/VolumetricReplicationPadding.c"
 #include "THGenerateFloatTypes.h"
 
+
+#include "generic/Im2Col.c"
+#include "THGenerateFloatTypes.h"
+
 #include "generic/VolumetricUpSamplingNearest.c"
 #include "THGenerateFloatTypes.h"
 
 #include "generic/VolumetricUpSamplingTrilinear.c"
 #include "THGenerateFloatTypes.h"
-
