@@ -1483,10 +1483,10 @@ TH_API void THNN_(VolumetricReplicationPadding_updateGradInput)(
 
 
 TH_API void THNN_(Im2Col_updateGradInput)(
-	  THCState *state,
-	  THCTensor *input,
-	  THCTensor *gradOutput,
-	  THCTensor *gradInput,
+	  THNNState *state,
+	  THTensor *input,
+	  THTensor *gradOutput,
+	  THTensor *gradInput,
           int kW, int kH,
           int dW, int dH,
           int padW, int padH,
